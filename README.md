@@ -17,10 +17,13 @@ FFXI Addon for Ashita - Automated COR Rolling
 - roll1 <roll> (can use beginning of roll name ie: cor = corsair's, or stat)
 - roll2 <roll>
 - engaged on/off - Enable or disable only rolling while engaged
-- crooked2 on/off - Allows crooked to also be used for the second roll or not
+- crooked2 on/off - Allows Crooked Cards to also be used for the second roll
+- randomdeal on/off - Allows Random Deal to be used
+- oldrandomdeal on/off - on;focuses on resetting Snake Eye/Fold, off;focuses on resetting Crooked Cards
+- gamble on/off - Abuses bust immunity to try to get double 11's as much as possible
 
 ## Recommendations
 - Ambu runs (Normal mode) : crooked2 on/random deal on/oldrandomdeal off/gamble off
-- ML party (Gamble mode) : COR/SAM rolls/crooked2 on/random deal on/oldrandomdeal on/gamble on
+- ML party (Gamble mode) : COR(roll1)/SAM(roll2)/crooked2 off/random deal on/oldrandomdeal on/gamble on
 
 ## v0.3 Patch Notes
