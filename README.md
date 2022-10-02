@@ -29,19 +29,19 @@ FFXI Addon for Ashita - Automated COR Rolling
 
 ## v0.3 Patch Notes
 
-- Fixed issues that would lead to snake eye being ignored when it should be used
+- Fixed issues that would lead to Snake Eye being ignored when it should be used
 - Snake Eye can now go for lucky rolls as well as 11's
-- Fixed an issue with snake eye not being used to remove samurai's unlucky roll (6)
+- Fixed an issue with Snake Eye not being used to remove samurai's unlucky roll (6)
 - Fixed issues that would lead to crooked rolls getting busted for no reason
 - Fixed issues that would lead to random deal being used in the middle of rolls causing unexpected behavior
 - Fixed an issue that would lead to abnormal waiting time in between rolls when busting
 - Fixed a bug that made it impossible to hide the UI
 - Fixed a bug that would lead to incorrect debug messages
-- Changed random deal so it can also be used for crooked cards in between rolls
-- Made it so crooked cards can also be used for roll 2
-- Added a command to keep the old random deal behavior (use random deal for fold/snake eye) /oldrandomdeal on/off
-- Added a command to never use crooked on roll 2 /crooked2 on/off
-- Added a command to prevent the bot from using random deal at all (in case it musts be saved for later in the fight) /randomdeal on/off
+- Changed random deal so it can also be used for Crooked Cards in between rolls
+- Made it so Crooked Cards can also be used for roll 2
+- Added a command to keep the old Random Deal behavior (use random deal for fold/snake eye) /oldrandomdeal on/off
+- Added a command to never use Crooked Cards on roll 2 /crooked2 on/off
+- Added a command to prevent the bot from using Random Deal at all (in case it must be saved for later in the fight) /randomdeal on/off
 - Added a command to let your party know that you're about to roll /partyalert on/off
 - Added debug messages that explain the decision making when rolling
 - Added new flags to the ingame UI
