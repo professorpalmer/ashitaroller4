@@ -7,7 +7,7 @@ FFXI Addon for Ashita - Automated COR Rolling
 ## Features
 - Automatic corsair rolling
 - Can use Crooked Cards, Fold, Snake Eye and Random Deal
-- Crooked Cards can be focus on one roll or be used for both, Random Deal can be disabled
+- Crooked Cards can focus on one roll or be used for both, Random Deal can be disabled
 - Stops on zones
 - Normal mode to put good rolls up asap (i.e : Quick ambu runs), Gamble mode to try and maintain double 11's abusing bust immunity (i.e : ML grind)
 
