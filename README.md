@@ -31,7 +31,7 @@ FFXI Addon for Ashita - Automated COR Rolling
 
 - Fixed issues that would lead to snake eye being ignored when it should be used
 - Snake Eye can now go for lucky rolls as well as 11's
-- Fixed an issue with snake eye not being used for samurai's unlucky roll (6)
+- Fixed an issue with snake eye not being used to remove samurai's unlucky roll (6)
 - Fixed issues that would lead to crooked rolls getting busted for no reason
 - Fixed issues that would lead to random deal being used in the middle of rolls causing unexpected behavior
 - Fixed an issue that would lead to abnormal waiting time in between rolls when busting
