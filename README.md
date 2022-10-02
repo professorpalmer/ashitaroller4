@@ -45,7 +45,3 @@ FFXI Addon for Ashita - Automated COR Rolling
 - Added a command to let your party know that you're about to roll /partyalert on/off
 - Added debug messages that explain the decision making when rolling
 - Added new flags to the ingame UI
-
-- Normal mode (better when paired with oldrandomdeal off) will focus on getting rolls up quickly focusing on Crooked/LuckyRolls using Random Deal to reset Crooked Cards. It is generally better for quick ambuscades and such.
-- Gamble mode (better when paired with oldrandomdeal on) will give less importance to Crooked/LuckyRolls and focus on getting 11's using SnakeEye/Fold and abusing bust immunity. Might be better if you want to focus on keeping double 11 for whatever reason.
-
