@@ -24,8 +24,8 @@ FFXI Addon for Ashita - Automated COR Rolling
 - partyalert on/off - Writes a message in /party a few seconds before rolling
 
 ## Recommendations
-- Quick Ambu runs (Normal mode) : crooked2 on/random deal on/oldrandomdeal off/gamble off
-- ML party (Gamble mode) : COR(roll1)/SAM(roll2)/crooked2 off/random deal on/oldrandomdeal on/gamble on
+- Quick Ambu runs (Normal mode) : crooked2 on/randomdeal on/oldrandomdeal off/gamble off
+- ML party (Gamble mode) : COR(roll1)/SAM(roll2)/crooked2 off/randomdeal on/oldrandomdeal on/gamble on
 
 ## v0.3 Patch Notes
 
