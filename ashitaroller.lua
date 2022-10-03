@@ -52,6 +52,7 @@ defaults.gamble = false
 zonedelay = 6
 stealthy = false
 was_stealthy = ''
+once = false
 
 zoning_bool = false
 lastRoll = 0
@@ -598,10 +599,11 @@ ashita.register_event('command', function(command, ntype)
           settings.gamble = false
         end
         save_config()
+      elseif cmd[1]=="once" then
+        RollerMessage('Will roll until both rolls are up.')
+        once = true
       end
-
     end
-
     return true;
 
   end);
@@ -660,7 +662,7 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
             return false
           end
 
-          if not autoroll or haveBuff('amnesia') or haveBuff('impairment') then return end
+          if (not autoroll and not once) or haveBuff('amnesia') or haveBuff('impairment') then return end
 
           if mainjob == 17 then
             if settings.gamble and lastRoll == 11 then
@@ -793,7 +795,7 @@ function doRoll()
       midRoll = false
     end
     --if Cities:contains(res.zones[windower.ffxi.get_info().zone].english) then return end
-    if not autoroll or midRoll or haveBuff('amnesia') or haveBuff('impairment') then 
+    if (not autoroll and not once) or midRoll or haveBuff('amnesia') or haveBuff('impairment') then 
       return
     end
     if haveBuff('Sneak') or haveBuff('Invisible') then
@@ -847,6 +849,11 @@ function doRoll()
       DebugMessage("We don't have any rolls")
       lastRoll = 0
       rollCrooked = false
+    end
+
+    if haveRoll1 and haveRoll2 and once then
+      DebugMessage("Rolled once, rolls are up")
+      once = false
     end
 
     if not haveRoll1 and phantomRecast == 0 then
