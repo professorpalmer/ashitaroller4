@@ -47,3 +47,4 @@ FFXI Addon for Ashita - Automated COR Rolling
 - Added a command to roll both rolls only once
 - Added debug messages that explain the decision making when rolling
 - Added new flags to the ingame UI
+- Improved rolling mechanics
