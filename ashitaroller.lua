@@ -35,7 +35,7 @@ require 'ffxi.recast'
 require 'logging'
 require 'timer'
 
-rollDelay        = 9 -- The delay to prevent spamming rolls.
+rollDelay        = 4 -- The delay to prevent spamming rolls.
 rollTimer        = 0;    -- The current time used for delaying packets.
 defaults = {}
 defaults.Roll1 = 304
@@ -323,6 +323,7 @@ ashita.register_event('command', function(command, ntype)
         DebugMessage("oldrandomdeal " .. tostring(settings.oldrandomdeal))
         DebugMessage("partyalert " .. tostring(settings.partyalert))	
         DebugMessage("gamble " .. tostring(settings.gamble))	
+        DebugMessage("once " .. tostring(once))	
       elseif cmd[1] == "display" then
         if cmd[2] == nil then
           settings.showdisplay = not settings.showdisplay
@@ -653,6 +654,7 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
           if rollNum > 11 then
             DebugMessage("Busted...")
             midRoll = false
+            return false
             --If roll is lucky or 11 returns.
           elseif (rollNum == rollInfo[rollID].stats[14] and (not settings.gamble or (not lastRoll == 11 and foldRecast > 0) or rollCrooked)) or rollNum == 11 then
             DebugMessage("Lucky or 11, done!")
@@ -794,6 +796,14 @@ function doRoll()
     if rollerTimeout > 3 then
       midRoll = false
     end
+    
+    local snakeRecast = ashita.ffxi.recast.get_ability_recast_by_id(197);--JAid 177 , RecastId 197
+    local foldRecast = ashita.ffxi.recast.get_ability_recast_by_id(198);-- JAid 178, RecastId 198
+    local phantomRecast = ashita.ffxi.recast.get_ability_recast_by_id(193);-- JAid 97, RecastId 193
+    local randomDealRecast = ashita.ffxi.recast.get_ability_recast_by_id(196);-- JAid 133, RecastId 196
+    local doubleupRecast = ashita.ffxi.recast.get_ability_recast_by_id(194);-- JAid 123, RecastId 194
+    local crookedcardsRecast = ashita.ffxi.recast.get_ability_recast_by_id(96);-- JAid 392, RecastId 96
+    
     --if Cities:contains(res.zones[windower.ffxi.get_info().zone].english) then return end
     if (not autoroll and not once) or midRoll or haveBuff('amnesia') or haveBuff('impairment') then 
       return
@@ -816,22 +826,14 @@ function doRoll()
     local status = player.Status
 
     if not (((status == 0) and not settings.engaged) or status == 1) then return end
-
-
-    local snakeRecast = ashita.ffxi.recast.get_ability_recast_by_id(197);--JAid 177 , RecastId 197
-    local foldRecast = ashita.ffxi.recast.get_ability_recast_by_id(198);-- JAid 178, RecastId 198
-    local phantomRecast = ashita.ffxi.recast.get_ability_recast_by_id(193);-- JAid 97, RecastId 193
-    local randomDealRecast = ashita.ffxi.recast.get_ability_recast_by_id(196);-- JAid 133, RecastId 196
-    local doubleupRecast = ashita.ffxi.recast.get_ability_recast_by_id(194);-- JAid 123, RecastId 194
-    local crookedcardsRecast = ashita.ffxi.recast.get_ability_recast_by_id(96);-- JAid 392, RecastId 96
-
+    
     --NEW RANDOM DEAL - Crooked Cards
-    if mainjob == 17 and phantomRecast == 0 and crookedcardsRecast > 0 and not midRoll and randomDealRecast == 0 and settings.randomdeal and not settings.oldrandomdeal then
+    if mainjob == 17 and phantomRecast == 0 and crookedcardsRecast > 0 and randomDealRecast == 0 and settings.randomdeal and not settings.oldrandomdeal then
       DebugMessage("Using Random Deal to reset Crooked Cards")
       AshitaCore:GetChatManager():QueueCommand('/ja "Random Deal" <me>', 1)
       return  
       --OLD BEHAVIOR - Fold or Snake Eye
-    elseif mainjob == 17 and phantomRecast == 0 and (foldRecast > 0 or snakeRecast > 0) and not midRoll and randomDealRecast == 0 and settings.randomdeal and settings.oldrandomdeal and not (haveRoll1 and haveRoll2) then
+    elseif mainjob == 17 and phantomRecast == 0 and (foldRecast > 0 or snakeRecast > 0) and randomDealRecast == 0 and settings.randomdeal and settings.oldrandomdeal and not (haveRoll1 and haveRoll2) then
       DebugMessage("Using Random Deal to reset Fold or Snake Eye")
       AshitaCore:GetChatManager():QueueCommand('/ja "Random Deal" <me>', 1)
       return  
@@ -842,10 +844,8 @@ function doRoll()
       AshitaCore:GetChatManager():QueueCommand('/ja "Fold" <me>', 1) 
       return
     end
-
-    if phantomRecast > 0 then return end
-
-    if not haveRoll1 and not haveRoll2 then
+    DebugMessage("IN DOROLL")
+    if not haveRoll1 and not haveRoll2 and phantomRecast == 0 then
       DebugMessage("We don't have any rolls")
       lastRoll = 0
       rollCrooked = false
@@ -863,6 +863,7 @@ function doRoll()
       end
       rollCrooked = false
       midRoll = true
+      rollerTimeout = 0
       if mainjob == 17 and mainjob_level > 94 and crookedcardsRecast == 0 then 
         DebugMessage("Using Crooked Cards")
         ashita.timer.once(1, function()
@@ -890,6 +891,7 @@ function doRoll()
       end
       rollCrooked = false
       midRoll = true
+      rollerTimeout = 0
       if mainjob == 17 and mainjob_level > 94 and crookedcardsRecast == 0 and settings.crooked2 then 
         DebugMessage("Using Crooked Cards")
         ashita.timer.once(1, function()
