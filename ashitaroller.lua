@@ -844,7 +844,7 @@ function doRoll()
       AshitaCore:GetChatManager():QueueCommand('/ja "Fold" <me>', 1) 
       return
     end
-    DebugMessage("IN DOROLL")
+
     if not haveRoll1 and not haveRoll2 and phantomRecast == 0 then
       DebugMessage("We don't have any rolls")
       lastRoll = 0
