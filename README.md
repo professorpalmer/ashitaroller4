@@ -22,6 +22,7 @@ FFXI Addon for Ashita - Automated COR Rolling
 - oldrandomdeal on/off - on;focuses on resetting Snake Eye/Fold, off;focuses on resetting Crooked Cards
 - gamble on/off - Abuses bust immunity to try to get double 11's as much as possible
 - partyalert on/off - Writes a message in /party a few seconds before rolling
+- once - Will roll both rolls once then go back to idle
 
 ## Recommendations
 - Quick Ambu runs (Normal mode) : crooked2 on/randomdeal on/oldrandomdeal off/gamble off
@@ -43,5 +44,6 @@ FFXI Addon for Ashita - Automated COR Rolling
 - Added a command to never use Crooked Cards on roll 2 /crooked2 on/off
 - Added a command to prevent the bot from using Random Deal at all (in case it must be saved for later in the fight) /randomdeal on/off
 - Added a command to let your party know that you're about to roll /partyalert on/off
+- Added a command to roll both rolls only once
 - Added debug messages that explain the decision making when rolling
 - Added new flags to the ingame UI
