@@ -35,7 +35,7 @@ require 'ffxi.recast'
 require 'logging'
 require 'timer'
 
-rollDelay        = 9 -- The delay to prevent spamming rolls , 3 seconds
+rollDelay        = 9 -- The delay to prevent spamming rolls.
 rollTimer        = 0;    -- The current time used for delaying packets.
 defaults = {}
 defaults.Roll1 = 304
