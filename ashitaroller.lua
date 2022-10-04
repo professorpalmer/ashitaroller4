@@ -26,7 +26,7 @@
 
 _addon.name = 'Ashita Roller'
 _addon.version = '0.3'
-_addon.author = 'Selindrile, thanks to: Balloon and Lorand - Ashita port by towbes - Big thanks to matix for action parsing code - Modified by Lumlum'
+_addon.author = 'Selindrile, thanks to: Balloon and Lorand - Ashita port by towbes, matix - v0.3 improvements by Lumlum'
 
 require 'common'
 require 'buffsmap'
