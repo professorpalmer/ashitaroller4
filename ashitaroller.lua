@@ -628,7 +628,7 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
 
         rollActor = act.actor_id
         local rollID = act.param
-        if rollID == 177 then return end
+        if rollID == 177 then return false end
 
         --windower.add_to_chat(7,'rollNum: '..act.targets[1].actions[1].param..'')
         local playerid = AshitaCore:GetDataManager():GetParty():GetMemberServerId(0)
@@ -664,7 +664,7 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
             return false
           end
 
-          if (not autoroll and not once) or haveBuff('amnesia') or haveBuff('impairment') then return end
+          if (not autoroll and not once) or haveBuff('amnesia') or haveBuff('impairment') then return false end
 
           if mainjob == 17 then
             if settings.gamble and lastRoll == 11 then
