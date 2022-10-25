@@ -32,4 +32,5 @@ FFXI Addon for Ashita - Automated COR Rolling
 - Fixed many bugs and issues
 - Greatly improved rolling mechanics
 - Added new commands and features, including two different rolling modes (Gamble/Quick)
+- Added per character settings
 - Changed the way actions are handled in order to allow the addon to roll without bugging out even while doing other things at the same time
