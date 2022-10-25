@@ -29,7 +29,7 @@ FFXI Addon for Ashita - Automated COR Rolling
 - AFK ML party (Gamble mode) : COR(roll1)/SAM(roll2)/crooked2 off/randomdeal on/oldrandomdeal on/gamble on
 
 ## v0.3 Patch Notes
-- Fixed many bugs and issues
+- Fixed bugs and issues
 - Greatly improved rolling mechanics
 - Added new commands and features, including two different rolling modes (Gamble/Quick)
 - Added per character settings
