@@ -350,7 +350,13 @@ ashita.register_event('command', function(command, ntype)
             {'roll' ,'To start or stop auto rolling type '},
             {'roll# rollname', 'Set roll to a roll from mapping table(can use beginning of roll name ie: cor = corsair, or stat)'},
             {'preset' , 'Set preset rolls (TP, Acc, WS, Nuke, Pet, PetNuke)'},
-            {'engaged' , 'on/off to enable or disable only rolling while engaged'}					
+            {'engaged' , 'on/off to enable or disable only rolling while engaged'},
+            {'crooked2','on/off - Allows Crooked Cards to also be used for the second roll'},
+            {'randomdeal','on/off - Allows Random Deal to be used'},
+            {'oldrandomdeal','on/off - on;focuses on resetting Snake Eye/Fold, off;focuses on resetting Crooked Cards'},
+            {'gamble','on/off - Abuses bust immunity to try to get double 11 as much as possible'},
+            {'partyalert','on/off - Writes a message in /party a few seconds before rolling'},
+            {'once','Will roll both rolls once then go back to idle'}
           });
       elseif cmd[1] == "debug" then
         if DebugMode == false then
@@ -375,7 +381,11 @@ ashita.register_event('command', function(command, ntype)
         DebugMessage("gamble " .. tostring(settings.gamble))	
         DebugMessage("once " .. tostring(once))	
         DebugMessage("nextAction " .. tostring(nextAction))
-        DebugMessage("nextRoll " .. tostring(rollInfo[nextRoll].name))
+        if nextRoll ~= 0 then
+          DebugMessage("nextRoll " .. tostring(rollInfo[nextRoll].name))
+        else
+          DebugMessage("nextRoll noRollFound")
+        end
       elseif cmd[1] == "display" then
         if cmd[2] == nil then
           settings.showdisplay = not settings.showdisplay
@@ -707,7 +717,7 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
           end
 
           if (not autoroll and not once) or haveBuff('amnesia') or haveBuff('impairment') then return false end
-          
+
           if mainjob == 17 then
             if settings.gamble and lastRoll == 11 then
               if snakeRecast == 0 and (rollNum == 10 or (rollNum == (rollInfo[rollID].stats[14]-1) and rollCrooked)) then
@@ -792,9 +802,9 @@ function doRoll()
     if haveBuff('amnesia') or haveBuff('impairment') then 
       return
     end
-    
+
     updateRolls()
-    
+
     --No need to do something if we don't want to roll or if we are already doing something
     if (not autoroll and not once) or nextAction ~= "idle" then
       return
