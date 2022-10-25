@@ -1,3 +1,4 @@
+--v0.3 changes Copyright (c) 2022, Lumlum
 --Copyright (c) 2016, Selindrile
 --All rights reserved.
 
@@ -9,7 +10,7 @@
 --    * Redistributions in binary form must reproduce the above copyright
 --      notice, this list of conditions and the following disclaimer in the
 --      documentation and/or other materials provided with the distribution.
---    * Neither the name of RollTracker nor the
+--    * Neither the name of RollTracker/AshitaRoller nor the
 --      names of its contributors may be used to endorse or promote products
 --      derived from this software without specific prior written permission.
 
@@ -26,20 +27,18 @@
 
 _addon.name = 'Ashita Roller'
 _addon.version = '0.3'
-_addon.author = 'Selindrile, thanks to: Balloon and Lorand - Ashita port by towbes, matix - v0.3 improvements by Lumlum'
+_addon.author = 'Selindrile, thanks to: Balloon and Lorand - Ashita port by towbes, matix - v0.3 changes by Lumlum'
 
 require 'common'
-require 'buffsmap'
-require 'job_abilities'
 require 'ffxi.recast'
-require 'logging'
-require 'timer'
+--require 'logging'
+--require 'timer'
 
 rollDelay        = 4 -- The delay to prevent spamming rolls.
 rollTimer        = 0;    -- The current time used for delaying packets.
 defaults = {}
-defaults.Roll1 = 304
-defaults.Roll2 = 106
+defaults.Roll1 = 114
+defaults.Roll2 = 109
 defaults.showdisplay = true
 defaults.displayx = nil
 defaults.displayy = nil
@@ -57,13 +56,30 @@ once = false
 zoning_bool = false
 lastRoll = 0
 rollCrooked = false
-midRoll = false
-rollerTimeout = 0 -- Used to timeout if we haven't rolled in a while, will set midRoll to false
+rollerTimeout = 0 -- Used to timeout if we haven't rolled in a while
 
 haveRoll1 = false
 haveRoll2 = false
 haveBust = false
 canDouble = false
+
+snakeRecast = nil
+foldRecast = nil
+phantomRecast = nil
+randomDealRecast = nil
+doubleupRecast = nil
+crookedcardsRecast = nil
+roll1RollTime = 0
+roll2RollTime = 0
+
+playerid = nil
+player = nil
+mainjob = nil
+mainjob_level = nil
+subjob = nil
+
+nextAction = "idle"
+nextRoll = 0
 
 DebugMode = false
 
@@ -110,8 +126,9 @@ end
 -- func: load_config
 -- desc: load roller config settings
 ---------------------------------------------------------------------------------------------------
-function load_config(file)
-  local tempSettings = ashita.settings.load(_addon.path .. '/settings/' .. file .. '.json');
+function load_config()
+  local playername = GetPlayerEntity().Name
+  local tempSettings = ashita.settings.load(_addon.path .. '/settings/' .. playername .. '.json');
   if tempSettings ~= nil then
     RollerMessage('Config file found.');
     return tempSettings		
@@ -127,19 +144,54 @@ end;
 -- desc: saves current RoE objectives to a file
 ---------------------------------------------------------------------------------------------------
 function save_config()
-  DebugMessage("Saved settings/config.json");
+  local playername = GetPlayerEntity().Name
+  DebugMessage("Saved settings/" .. playername .. ".json");
   -- Save the addon settings to a file (from the addonSettings table)
-  ashita.settings.save(_addon.path .. '/settings'  
-    .. '/config.json' , settings);
+  ashita.settings.save(_addon.path .. '/settings/' .. playername .. '.json', settings);
 end;
 
+function doNextAction()
+  if nextAction == "idle" then
+    return
+  elseif nextAction == "snakeeye" then
+    if haveBuff('snake eye') then
+      nextAction = "doubleup"
+    else
+      AshitaCore:GetChatManager():QueueCommand('/ja "Snake Eye" <me>', 1)
+    end
+  elseif nextAction == "doubleup" then
+    AshitaCore:GetChatManager():QueueCommand('/ja "Double-Up" <me>', 1)
+  elseif nextAction == "crooked" then
+    if haveBuff('crooked cards') then
+      nextAction = "rolling"
+    else
+      AshitaCore:GetChatManager():QueueCommand('/ja "Crooked Cards" <me>', 1)
+    end
+  elseif nextAction == "rolling" then
+    if settings.partyalert and rollerTimeout < 2 then
+      return
+    else
+      AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[nextRoll].name..'" <me>', 1)
+    end
+  elseif nextAction == "randomdeal" then
+    if randomDealRecast > 0 then
+      nextAction = "idle"
+    else
+      AshitaCore:GetChatManager():QueueCommand('/ja "Random Deal" <me>', 1)
+    end
+  elseif nextAction == "fold" then
+    if not haveBust then
+      nextAction = "idle"
+    else
+      AshitaCore:GetChatManager():QueueCommand('/ja "Fold" <me>', 1)
+    end
+  end
+end
 
 ashita.register_event('load', function()
-    settings = load_config('config')
+    settings = load_config()
 
     autoroll = false
-
-    --buffId = S{309} + S(res.buffs:english(string.endswith-{' Roll'})):map(table.get-{'en'})
 
     Rollindex = {'Fighter\'s Roll','Monk\'s Roll','Healer\'s Roll','Wizard\'s Roll','Warlock\'s Roll','Rogue\'s Roll','Gallant\'s Roll','Chaos Roll','Beast Roll',
       'Choral Roll','Hunter\'s Roll','Samurai Roll','Ninja Roll','Drachen Roll','Evoker\'s Roll','Magus\'s Roll','Corsair\'s Roll','Puppet Roll',
@@ -187,6 +239,8 @@ ashita.register_event('load', function()
       [69] = {id=69,en="Invisible",ja="インビジ",enl="Invisible",jal="インビジ"},
       [16] = {id=16,en="amnesia",ja="アムネジア",enl="amnesic",jal="アムネジア"},
       [261] = {id=261,en="impairment",ja="インペア",enl="impaired",jal="インペア"},
+      [357] = {id=357,en="Snake Eye",ja="スネークアイ",enl="Snake Eye",jal="スネークアイ"},
+      [601] = {id=601,en="Crooked Cards",ja="クルケッドカード",enl="Crooked Cards",jal="クルケッドカード"},
       }, {"id", "en", "ja", "enl", "jal"}
 
     --GUI stuff
@@ -309,11 +363,9 @@ ashita.register_event('command', function(command, ntype)
           DebugMode = false
         end
       elseif cmd[1] == "flags" then
-
         DebugMessage("zoningbool " .. tostring(zoning_bool))
         DebugMessage("lastroll " .. tostring(lastRoll))
         DebugMessage("rollcrooked " .. tostring(rollCrooked))
-        DebugMessage("midroll " ..tostring(midRoll))
         DebugMessage("haveroll1 " .. tostring(haveRoll1))
         DebugMessage("haveroll2 " .. tostring(haveRoll2))
         DebugMessage("havebust " .. tostring(haveBust))
@@ -324,6 +376,8 @@ ashita.register_event('command', function(command, ntype)
         DebugMessage("partyalert " .. tostring(settings.partyalert))	
         DebugMessage("gamble " .. tostring(settings.gamble))	
         DebugMessage("once " .. tostring(once))	
+        DebugMessage("nextAction " .. tostring(nextAction))
+        DebugMessage("nextRoll " .. tostring(rollInfo[nextRoll].name))
       elseif cmd[1] == "display" then
         if cmd[2] == nil then
           settings.showdisplay = not settings.showdisplay
@@ -354,12 +408,9 @@ ashita.register_event('command', function(command, ntype)
         else
           RollerMessage('Not a recognized engaged subcommand. (on, off)')
         end
-      elseif cmd[1] == "midroll" and cmd[2] == 'off' then	
-        midRoll = false
       elseif cmd[1] == "start" or cmd[1] == "go" or cmd[1] == "begin" or cmd[1] == "enable" or cmd[1] == "on" or cmd[1] == "engage" or cmd[1] == "resume" then
         zonedelay = 6
         if autoroll == false then
-          midRoll = false
           autoroll = true
           RollerMessage('Enabling Automatic Rolling.')
         elseif autoroll == true then
@@ -367,6 +418,7 @@ ashita.register_event('command', function(command, ntype)
         end
       elseif cmd[1] == "stop" or cmd[1] == "quit" or cmd[1] == "end" or cmd[1] == "disable" or cmd[1] == "off" or cmd[1] == "disengage" or cmd[1] == "pause" then
         zonedelay = 6
+        once = false
         if autoroll == true then
           autoroll = false
           RollerMessage('Disabling Automatic Rolling.')
@@ -625,18 +677,9 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
       act = parse_rolls(packet)
 
       if act.category == 6 and table.containskey(rollInfo, act.param) then
-
         rollActor = act.actor_id
         local rollID = act.param
         if rollID == 177 then return false end
-
-        --windower.add_to_chat(7,'rollNum: '..act.targets[1].actions[1].param..'')
-        local playerid = AshitaCore:GetDataManager():GetParty():GetMemberServerId(0)
-        local mainjob = AshitaCore:GetDataManager():GetPlayer():GetMainJob();
-        local subjob = AshitaCore:GetDataManager():GetPlayer():GetSubJob();
-
-        local snakeRecast = ashita.ffxi.recast.get_ability_recast_by_id(197);--JAid 177 , RecastId 197
-        local foldRecast = ashita.ffxi.recast.get_ability_recast_by_id(198);-- JAid 178, RecastId 198
 
         if act.actor_id == playerid then
           rollerTimeout = 0 -- We rolled so set the timeout to 0
@@ -644,80 +687,61 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
           DebugMessage("Rollname: " .. rollname)
           local rollNum = act.targets[1].actions[1].param
           DebugMessage("RollNum: " .. rollNum)
-          --Appeared to be bugged
-          --if act.targets[1].actions[1].message ~= 424 then
-          --DebugMessage("REMOVING")
-          --lastRollCrooked = false
-          --end
-          DebugMessage("RollId: " .. rollID)	
-          -- We busted so resetting midRoll to roll again
+          DebugMessage("RollId: " .. rollID)
+          --We need to force haveRoll update for snake eye use, normal update mode doesn't work here
+          if rollID == settings.Roll1 then
+            haveRoll1 = true
+          elseif rollID == settings.Roll2 then
+            haveRoll2 = true
+          end          
+          -- We busted so resetting to roll again
           if rollNum > 11 then
             DebugMessage("Busted...")
-            midRoll = false
+            nextAction = "idle"
             return false
             --If roll is lucky or 11 returns.
           elseif (rollNum == rollInfo[rollID].stats[14] and (not settings.gamble or (not lastRoll == 11 and foldRecast > 0) or rollCrooked)) or rollNum == 11 then
             DebugMessage("Lucky or 11, done!")
+            nextAction = "idle"
             RollerMessage(rollname .. " final roll: " .. rollNum)
             lastRoll = rollNum
-            midRoll = false
             return false
           end
 
           if (not autoroll and not once) or haveBuff('amnesia') or haveBuff('impairment') then return false end
-
+          
           if mainjob == 17 then
             if settings.gamble and lastRoll == 11 then
               if snakeRecast == 0 and (rollNum == 10 or (rollNum == (rollInfo[rollID].stats[14]-1) and rollCrooked)) then
                 DebugMessage("Using Snake Eye for 11 or crooked lucky ")
-                ashita.timer.once(3, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja "Snake Eye" <me>', 1);
-                  end);
-                ashita.timer.once(7, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja Double-Up <me>', 1);
-                  end);
+                nextAction = "snakeeye";
               else
                 DebugMessage("Rolling because we're immune to bust and gambling")
-                ashita.timer.once(6, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja Double-Up <me>', 1);
-                  end);
+                nextAction = "doubleup"
               end
             else
               if snakeRecast == 0 and (rollNum == 10 or (rollNum == (rollInfo[rollID].stats[14]-1) and (not settings.gamble or rollCrooked))) then
                 DebugMessage("Using Snake Eye for lucky or 11, will only go for 11 if gamble mode is on, unless crooked")
-                ashita.timer.once(3, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja "Snake Eye" <me>', 1);
-                  end);
-                ashita.timer.once(7, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja Double-Up <me>', 1);
-                  end); 
+                nextAction = "snakeeye"
               elseif snakeRecast == 0 and (foldRecast > 0 or (rollCrooked and not settings.gamble)) and rollNum == rollInfo[rollID].stats[15] then
                 DebugMessage("Using Snake Eye to remove unlucky if fold is down or if this is a crooked roll")
-                ashita.timer.once(3, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja "Snake Eye" <me>', 1);
-                  end);
-                ashita.timer.once(7, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja Double-Up <me>', 1);
-                  end); 
+                nextAction = "snakeeye"
               elseif foldRecast == 0 and (not rollCrooked or settings.gamble) then
                 DebugMessage("Trying our luck because roll is not crooked and we have fold up, will ignore crooked if gamble mode is on")
-                ashita.timer.once(6, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja Double-Up <me>', 1);
-                  end);
+                nextAction = "doubleup"
               elseif lastRoll == 11 and not rollCrooked then
                 DebugMessage("Immune to bust;Trying to get an 11 if roll isn't crooked")
-                ashita.timer.once(6, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja Double-Up <me>', 1);
-                  end);
+                nextAction = "doubleup"
               elseif rollNum < 6 then
                 DebugMessage("Rolling because roll is smaller than 6")
-                ashita.timer.once(6, function()
-                    AshitaCore:GetChatManager():QueueCommand('/ja Double-Up <me>', 1);
-                  end);
+                nextAction = "doubleup"
+              elseif haveRoll1 and haveRoll2 and snakeRecast == 0 and rollNum+1 ~= rollInfo[rollID].stats[15] and os.time()-roll1RollTime<240 and os.time()-roll2RollTime<240 then
+                DebugMessage("Trying our luck with Snake Eye because this is the last roll and rollnumber+1 is not unlucky, Snake Eye will be back for next roll")
+                nextAction = "snakeeye"
               else
                 DebugMessage("Finished this roll")
+                nextAction = "idle"
                 RollerMessage(rollname .. " final roll: " .. rollNum)
-                midRoll = false
                 lastRoll = rollNum
               end
             end
@@ -754,60 +778,38 @@ function haveBuff(buffname)
   return false
 end
 
-Cities = {
-  "Ru'Lude Gardens",
-  "Upper Jeuno",
-  "Lower Jeuno",
-  "Port Jeuno",
-  "Port Windurst",
-  "Windurst Waters",
-  "Windurst Woods",
-  "Windurst Walls",
-  "Heavens Tower",
-  "Port San d'Oria",
-  "Northern San d'Oria",
-  "Southern San d'Oria",
-  "Chateau d'Oraguille",
-  "Port Bastok",
-  "Bastok Markets",
-  "Bastok Mines",
-  "Metalworks",
-  "Aht Urhgan Whitegate",
-  "The Colosseum",
-  "Tavanazian Safehold",
-  "Nashmau",
-  "Selbina",
-  "Mhaura",
-  "Rabao",
-  "Norg",
-  "Kazham",
-  "Eastern Adoulin",
-  "Western Adoulin",
-  "Celennia Memorial Library",
-  "Mog Garden",
-  "Leafallia"
-}
-
 function doRoll()
-
+  doNextAction()
+  --Not sure this is needed, might remove
+  updateRecast()
+  --Timeout after 40 secs without rolling, should not be needed but might be useful if something goes unexpected
   if  (os.time() >= (rollTimer + rollDelay)) then
     rollTimer = os.time();
     rollerTimeout = rollerTimeout + 1
-    if rollerTimeout > 3 then
-      midRoll = false
+    if rollerTimeout > 11 then
+      nextAction = "idle"
     end
-    
-    local snakeRecast = ashita.ffxi.recast.get_ability_recast_by_id(197);--JAid 177 , RecastId 197
-    local foldRecast = ashita.ffxi.recast.get_ability_recast_by_id(198);-- JAid 178, RecastId 198
-    local phantomRecast = ashita.ffxi.recast.get_ability_recast_by_id(193);-- JAid 97, RecastId 193
-    local randomDealRecast = ashita.ffxi.recast.get_ability_recast_by_id(196);-- JAid 133, RecastId 196
-    local doubleupRecast = ashita.ffxi.recast.get_ability_recast_by_id(194);-- JAid 123, RecastId 194
-    local crookedcardsRecast = ashita.ffxi.recast.get_ability_recast_by_id(96);-- JAid 392, RecastId 96
-    
-    --if Cities:contains(res.zones[windower.ffxi.get_info().zone].english) then return end
-    if (not autoroll and not once) or midRoll or haveBuff('amnesia') or haveBuff('impairment') then 
+
+    --No need to do something if we can't do it
+    if haveBuff('amnesia') or haveBuff('impairment') then 
       return
     end
+    --No need to do something if we don't want to roll or if we are already doing something
+    if (not autoroll and not once) or nextAction ~= "idle" then
+      return
+    end
+    
+    updateRolls()
+    
+    --No need to do something if we already got both rolls
+    if haveRoll1 and haveRoll2 and nextAction=="idle" then
+      if once then
+        DebugMessage("Rolled once, rolls are up")
+      end
+      once = false
+      return
+    end
+    --Nothing done while sneak or invisible
     if haveBuff('Sneak') or haveBuff('Invisible') then
       DebugMessage("Stealthy activated")
       stealthy = true
@@ -815,143 +817,128 @@ function doRoll()
       stealthy = false
     end
     if stealthy then return end
-
-    local playerid = AshitaCore:GetDataManager():GetParty():GetMemberServerId(0)
-    local player = GetPlayerEntity()
-    local mainjob = AshitaCore:GetDataManager():GetPlayer():GetMainJob();
-    local mainjob_level = AshitaCore:GetDataManager():GetPlayer():GetMainJobLevel();
-    local subjob = AshitaCore:GetDataManager():GetPlayer():GetSubJob();
+    --Nothing done if we are not COR or /COR
     if not (mainjob == 17 or subjob == 17) then return end
-
-    local status = player.Status
-
+    --Rolls only while engaged if turned on
+    status = player.Status
     if not (((status == 0) and not settings.engaged) or status == 1) then return end
-    
+
     --NEW RANDOM DEAL - Crooked Cards
     if mainjob == 17 and phantomRecast == 0 and crookedcardsRecast > 0 and randomDealRecast == 0 and settings.randomdeal and not settings.oldrandomdeal then
       DebugMessage("Using Random Deal to reset Crooked Cards")
-      AshitaCore:GetChatManager():QueueCommand('/ja "Random Deal" <me>', 1)
+      nextAction = "randomdeal"
       return  
       --OLD BEHAVIOR - Fold or Snake Eye
-    elseif mainjob == 17 and phantomRecast == 0 and (foldRecast > 0 or snakeRecast > 0) and randomDealRecast == 0 and settings.randomdeal and settings.oldrandomdeal and not (haveRoll1 and haveRoll2) then
+    elseif mainjob == 17 and phantomRecast == 0 and (foldRecast > 0 or snakeRecast > 0) and randomDealRecast == 0 and settings.randomdeal and settings.oldrandomdeal then
       DebugMessage("Using Random Deal to reset Fold or Snake Eye")
-      AshitaCore:GetChatManager():QueueCommand('/ja "Random Deal" <me>', 1)
+      nextAction = "randomdeal"
       return  
     end
 
     if mainjob == 17 and haveBust and foldRecast == 0 then 
       DebugMessage("We busted, folding")
-      AshitaCore:GetChatManager():QueueCommand('/ja "Fold" <me>', 1) 
+      nextAction = "fold"
       return
     end
 
     if not haveRoll1 and not haveRoll2 and phantomRecast == 0 then
       DebugMessage("We don't have any rolls")
       lastRoll = 0
-      rollCrooked = false
-    end
-
-    if haveRoll1 and haveRoll2 and once then
-      DebugMessage("Rolled once, rolls are up")
-      once = false
     end
 
     if not haveRoll1 and phantomRecast == 0 then
       DebugMessage("We don't have roll 1 buff, trying roll1")
+      roll1RollTime = os.time();
       if settings.partyalert then
-        AshitaCore:GetChatManager():QueueCommand('/p Rolling '..rollInfo[settings.Roll1].name..' in 6 secs, stay close <call12>', 1);
+        AshitaCore:GetChatManager():QueueCommand('/p Rolling '..rollInfo[settings.Roll1].name..' in 8 secs, stay close <call12>', 1);
       end
       rollCrooked = false
-      midRoll = true
       rollerTimeout = 0
       if mainjob == 17 and mainjob_level > 94 and crookedcardsRecast == 0 then 
         DebugMessage("Using Crooked Cards")
-        ashita.timer.once(1, function()
-            AshitaCore:GetChatManager():QueueCommand('/ja "Crooked Cards" <me>', 1);
-            rollCrooked = true
-          end);
         RollerMessage(rollInfo[settings.Roll1].name .. " Lucky: " .. rollInfo[settings.Roll1].stats[14] .. " Unlucky: " .. rollInfo[settings.Roll1].stats[15])
-        ashita.timer.once(6, function()
-            AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll1].name..'" <me>', 1);
-          end);
+        rollCrooked = true
+        nextRoll = settings.Roll1
+        nextAction = "crooked"
       else
         RollerMessage(rollInfo[settings.Roll1].name .. " Lucky: " .. rollInfo[settings.Roll1].stats[14] .. " Unlucky: " .. rollInfo[settings.Roll1].stats[15])
-        if settings.partyalert then
-          ashita.timer.once(6, function()
-              AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll1].name..'" <me>', 1);
-            end);
-        else
-          AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll1].name..'" <me>', 1)
-        end
+        nextRoll = settings.Roll1
+        nextAction = "rolling"
       end
     elseif not haveRoll2 and not haveBust and phantomRecast == 0 then
       DebugMessage("We don't have roll 2 buff, trying roll2")
+      roll2RollTime = os.time();
       if settings.partyalert then
-        AshitaCore:GetChatManager():QueueCommand('/p Rolling '..rollInfo[settings.Roll2].name..' in 6 secs, stay close <call12>', 1);
+        AshitaCore:GetChatManager():QueueCommand('/p Rolling '..rollInfo[settings.Roll2].name..' in 8 secs, stay close <call12>', 1);
       end
       rollCrooked = false
-      midRoll = true
       rollerTimeout = 0
       if mainjob == 17 and mainjob_level > 94 and crookedcardsRecast == 0 and settings.crooked2 then 
         DebugMessage("Using Crooked Cards")
-        ashita.timer.once(1, function()
-            AshitaCore:GetChatManager():QueueCommand('/ja "Crooked Cards" <me>', 1);
-            rollCrooked = true
-          end);
         RollerMessage(rollInfo[settings.Roll2].name .. " Lucky: " .. rollInfo[settings.Roll2].stats[14] .. " Unlucky: " .. rollInfo[settings.Roll2].stats[15])
-        ashita.timer.once(6, function()
-            AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll2].name..'" <me>', 1)
-          end);
+        rollCrooked = true
+        nextRoll = settings.Roll2
+        nextAction = "crooked"
       else
         RollerMessage(rollInfo[settings.Roll2].name .. " Lucky: " .. rollInfo[settings.Roll2].stats[14] .. " Unlucky: " .. rollInfo[settings.Roll2].stats[15])
-        if settings.partyalert then
-          ashita.timer.once(6, function()
-              AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll2].name..'" <me>', 1)
-            end);
-        else
-          AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll2].name..'" <me>', 1)
-        end
+        nextRoll = settings.Roll2
+        nextAction = "rolling"
       end
     end
   end
 end
 
-ashita.register_event('render', function()
+function updateRolls()
+  haveRoll1 = false
+  haveRoll2 = false
+  haveBust = false
 
-    local player = GetPlayerEntity();
+  --DATA GATHERING
+  --Rolls&Bust
+  local buffs						= AshitaCore:GetDataManager():GetPlayer():GetBuffs();
+  for i,v in pairs(buffs) do
+    if buffs[i] == rollInfo[settings.Roll1].buffid then
+      haveRoll1 = true
+    end
+    if buffs[i] == rollInfo[settings.Roll2].buffid then
+      haveRoll2 = true
+    end	
+    if buffs[i] == 309 then
+      haveBust = true
+    end	
+  end
+end
+
+function updateRecast()
+  --Recasts&Infos
+  snakeRecast = ashita.ffxi.recast.get_ability_recast_by_id(197);--JAid 177 , RecastId 197
+  foldRecast = ashita.ffxi.recast.get_ability_recast_by_id(198);-- JAid 178, RecastId 198
+  phantomRecast = ashita.ffxi.recast.get_ability_recast_by_id(193);-- JAid 97, RecastId 193
+  randomDealRecast = ashita.ffxi.recast.get_ability_recast_by_id(196);-- JAid 133, RecastId 196
+  doubleupRecast = ashita.ffxi.recast.get_ability_recast_by_id(194);-- JAid 123, RecastId 194
+  crookedcardsRecast = ashita.ffxi.recast.get_ability_recast_by_id(96);-- JAid 392, RecastId 96
+
+  player = GetPlayerEntity()
+  playerid = AshitaCore:GetDataManager():GetParty():GetMemberServerId(0)
+  mainjob = AshitaCore:GetDataManager():GetPlayer():GetMainJob()
+  mainjob_level = AshitaCore:GetDataManager():GetPlayer():GetMainJobLevel()
+  subjob = AshitaCore:GetDataManager():GetPlayer():GetSubJob()  
+end
+
+ashita.register_event('render', function()
+    updateRecast()
     if (player == nil) then
       zonedelay = 0
       autoroll = false
       lastRoll = 0
-      rollCrooked = false
-      return;
+      nextAction = "idle"
+      return
     end
 
     if zoning_bool then
       return
     end
 
-    haveRoll1 = false
-    haveRoll2 = false
-    haveBust = false
-
-
-    local buffs						= AshitaCore:GetDataManager():GetPlayer():GetBuffs();
-    for i,v in pairs(buffs) do
-      --we're mounted
-      --		if buffs[i] == 601 then -- We have crooked roll buff
-      --			lastRollCrooked = true
-      --		end
-      if buffs[i] == rollInfo[settings.Roll1].buffid then
-        haveRoll1 = true
-      end
-      if buffs[i] == rollInfo[settings.Roll2].buffid then
-        haveRoll2 = true
-      end	
-      if buffs[i] == 309 then
-        haveBust = true
-      end	
-    end
     rollsFixedOverlay()
     doRoll()
   end);
