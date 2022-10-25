@@ -31,8 +31,6 @@ _addon.author = 'Selindrile, thanks to: Balloon and Lorand - Ashita port by towb
 
 require 'common'
 require 'ffxi.recast'
---require 'logging'
---require 'timer'
 
 rollDelay        = 4 -- The delay to prevent spamming rolls.
 rollTimer        = 0;    -- The current time used for delaying packets.
@@ -794,13 +792,13 @@ function doRoll()
     if haveBuff('amnesia') or haveBuff('impairment') then 
       return
     end
+    
+    updateRolls()
+    
     --No need to do something if we don't want to roll or if we are already doing something
     if (not autoroll and not once) or nextAction ~= "idle" then
       return
     end
-    
-    updateRolls()
-    
     --No need to do something if we already got both rolls
     if haveRoll1 and haveRoll2 and nextAction=="idle" then
       if once then
