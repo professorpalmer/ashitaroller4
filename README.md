@@ -1,36 +1,124 @@
-# ashitaroller
-FFXI Addon for Ashita - Automated COR Rolling
+# Ashita Roller v0.4.0
+FFXI Addon for Ashita v4 - Automated COR Rolling with Subjob Support
 
-- Original windower addon : https://github.com/Noobcakes/Roller
-- Ashita port this is based on : https://github.com/towbes/ffxi/tree/master/ashitaroller
+**Major Ashita v4 Port by Palmer (Zodiarchy @ Asura)**
+- Original windower addon: https://github.com/Noobcakes/Roller
+- Based on Ashita v3 port by towbes & matix
+- v0.3 improvements by Lumlum
+- **v0.4 Complete Ashita4 rewrite with subjob COR support**
+
+## New in v0.4.0 (Ashita v4 Port)
+- ✅ **Full Ashita v4 compatibility** - Complete API migration
+- ✅ **Subjob COR support** - Works when COR is your subjob (THF/COR, etc.)
+- ✅ **Smart subjob behavior** - Single roll only, less aggressive double-ups (1-4 only)
+- ✅ **Automatic mode detection** - Recognizes main vs subjob COR automatically
+- ✅ **Enhanced status display** - Shows current mode and job info
+- ✅ **Self-contained** - Single file, no external dependencies
 
 ## Features
-- Automatic corsair rolling
-- Can use Crooked Cards, Fold, Snake Eye and Random Deal
-- Crooked Cards can focus on one roll or be used for both, Random Deal can be disabled
-- Stops on zones
-- Quick mode to put good rolls up decently quick (i.e : Quick ambu runs), Gamble mode to try and maintain double 11's abusing bust immunity (i.e : ML grind)
+
+### Core Rolling
+- **Automatic corsair rolling** for both main and subjob COR
+- **Intelligent double-up logic** based on your job setup
+- **Roll management** with Crooked Cards, Fold, Snake Eye, Random Deal support
+- **Zone-safe** - Automatically stops/resumes on zone changes
+
+### Job Mode Support
+| Mode | Rolls | Double-Up Strategy | Special Abilities |
+|------|-------|-------------------|-------------------|
+| **Main COR** | Two rolls | Aggressive (1-5+) | Full access to Snake Eye, Crooked Cards, Fold, Random Deal |
+| **Sub COR** | Single roll | Conservative (1-4 only) | Limited abilities, no advanced features |
+
+### Advanced Features
+- **Quick Mode** - Fast setup for short content (Ambuscade, etc.)
+- **Gamble Mode** - Maintains double 11s using bust immunity (ML parties)
+- **Party Alerts** - Optional countdown warnings
+- **Stealth Detection** - Pauses while Sneak/Invisible
 
 ## Commands
-- On/Start/Go/Enable/On/Engage - Start rolling  
-- Stop/Off/Quit/End/Disable/Disengage - Stop rolling  
-- roll1 <roll> (can use beginning of roll name ie: cor = corsair's, or stat)
-- roll2 <roll>
-- engaged on/off - Enable or disable only rolling while engaged
-- crooked2 on/off - Allows Crooked Cards to also be used for the second roll
-- randomdeal on/off - Allows Random Deal to be used
-- oldrandomdeal on/off - on;focuses on resetting Snake Eye/Fold, off;focuses on resetting Crooked Cards
-- gamble on/off - Abuses bust immunity to try to get double 11's as much as possible
-- partyalert on/off - Writes a message in /party a few seconds before rolling
-- once - Will roll both rolls once then go back to idle
 
-## Examples
-- Quick Ambu runs (Quick mode) : crooked2 on/randomdeal on/oldrandomdeal off/gamble off
-- AFK ML party (Gamble mode) : COR(roll1)/SAM(roll2)/crooked2 off/randomdeal on/oldrandomdeal on/gamble on
+### Basic Control
+```
+/roller start          - Begin automatic rolling
+/roller stop           - Stop automatic rolling  
+/roller                - Show current status and mode
+/roller flags          - Debug information
+```
 
-## v0.3 Patch Notes
-- Fixed bugs and issues
-- Greatly improved rolling mechanics
-- Added new commands and features, including two different rolling modes (Gamble/Quick)
-- Added per character settings
-- Changed the way actions are handled in order to allow the addon to roll without bugging out even while doing other things at the same time
+### Roll Configuration
+```
+/roller roll1 <roll>   - Set first roll (e.g., "cors", "chaos", "samurai")
+/roller roll2 <roll>   - Set second roll (main COR only)
+/roller preset <type>  - Quick presets (TP, Acc, WS, Nuke, Pet, PetNuke)
+```
+
+### Settings
+```
+/roller engaged on/off     - Only roll while engaged
+/roller crooked2 on/off    - Use Crooked Cards for second roll
+/roller randomdeal on/off  - Enable Random Deal usage
+/roller oldrandomdeal on/off - Focus: on=Snake Eye/Fold, off=Crooked Cards
+/roller gamble on/off      - Abuse bust immunity for double 11s
+/roller partyalert on/off  - Party countdown messages
+/roller once              - Roll once then stop
+/roller display on/off    - Toggle GUI overlay
+```
+
+## Usage Examples
+
+### Subjob COR (THF/COR, WAR/COR, etc.)
+```bash
+/roller roll1 chaos    # Set Chaos Roll
+/roller start          # Begin rolling (single roll, conservative)
+```
+**Expected behavior:** Only attempts Chaos Roll, doubles up on 1-4, stops on 5+
+
+### Main COR - Quick Mode (Ambuscade)
+```bash
+/roller preset TP
+/roller crooked2 on
+/roller randomdeal on
+/roller oldrandomdeal off
+/roller start
+```
+
+### Main COR - Gamble Mode (ML Parties)
+```bash
+/roller roll1 corsair
+/roller roll2 samurai  
+/roller crooked2 off
+/roller randomdeal on
+/roller oldrandomdeal on
+/roller gamble on
+/roller start
+```
+
+## Installation
+1. Copy `ashitaroller.lua` to your `/addons/ashitaroller/` folder
+2. Load with `/addon load ashitaroller`
+3. The addon will auto-detect your job setup and configure accordingly
+
+## Mode Detection
+The addon automatically detects your setup:
+- **Main Job COR (ID: 17)** = Full features, two rolls
+- **Sub Job COR (ID: 17)** = Limited features, single roll  
+- **No COR** = Rolling disabled
+
+Use `/roller` to verify your current mode is detected correctly.
+
+## Compatibility
+- **Ashita v4 only** (use v0.3 for Ashita v3)
+- **FFXI Retail** tested on multiple servers
+- **All job combinations** that include COR as main or sub
+
+## Credits
+- **Original concept:** Noobcakes (Windower Roller)
+- **Ashita v3 port:** towbes, matix  
+- **v0.3 improvements:** Lumlum
+- **v0.4 Ashita4 port & subjob support:** Palmer (Zodiarchy @ Asura)
+
+---
+*For bugs or feature requests, contact Palmer on Asura or submit an issue.*
+```
+
+You can **safely delete** `buffsmap.lua` and `job_abilities.lua` - they're no longer needed since everything is self-contained in the main file now!

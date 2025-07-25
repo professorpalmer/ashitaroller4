@@ -25,12 +25,11 @@
 --(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 --SOFTWARE, EVEN IFIF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-_addon.name = 'Ashita Roller'
-_addon.version = '0.3.1'
-_addon.author = 'Selindrile, thanks to: Balloon and Lorand - Ashita port by towbes, matix - v0.3 changes by Lumlum'
+addon.name = 'Ashita Roller'
+addon.version = '0.4.0'
+addon.author = 'Selindrile, thanks to: Balloon and Lorand - Ashita port by towbes, matix - v0.3 changes by Lumlum - v0.4 Ashita4 Rework by Palmer (Zodiarchy @ Asura)'
 
 require 'common'
-require 'ffxi.recast'
 
 rollDelay        = 4 -- The delay to prevent spamming rolls.
 rollTimer        = 0;    -- The current time used for delaying packets.
@@ -83,11 +82,8 @@ DebugMode = false
 
 settings = {}
 
---GUI Variable
-local variables =
-{
-  ['var_ShowTestWindow_rollsFixedoverlay']             = { 1, ImGuiVar_BOOLCPP }
-}
+--GUI Variable - simplified for Ashita v4
+local variables = {}
 
 function DebugMessage(message)
   if DebugMode then
@@ -99,7 +95,13 @@ function RollerMessage(message)
   print("\31\200[\31\05Roller\31\200]\31\207 " .. message)
 end
 
-
+-- Helper function to check if a string starts with a given prefix
+local function startswith(str, prefix)
+  if not str or not prefix then
+    return false
+  end
+  return string.sub(str, 1, string.len(prefix)) == prefix
+end
 
 -- Returns if the key searchkey is in t.
 function table.containskey(t, searchkey)
@@ -112,11 +114,11 @@ end
 ----------------------------------------------------------------------------------------------------
 local function print_help(cmd, help)
   -- Print the invalid format header..
-  print('\31\200[\31\05' .. _addon.name .. '\31\200]\30\01 ' .. '\30\68Invalid format for command:\30\02 ' .. cmd .. '\30\01'); 
+  print('\31\200[\31\05' .. addon.name .. '\31\200]\30\01 ' .. '\30\68Invalid format for command:\30\02 ' .. cmd .. '\30\01'); 
 
   -- Loop and print the help commands..
   for k, v in pairs(help) do
-    print('\31\200[\31\05' .. _addon.name .. '\31\200]\30\01 ' .. '\30\68Syntax:\30\02 ' .. v[1] .. '\30\71 ' .. v[2]);
+    print('\31\200[\31\05' .. addon.name .. '\31\200]\30\01 ' .. '\30\68Syntax:\30\02 ' .. v[1] .. '\30\71 ' .. v[2]);
   end
 end
 
@@ -125,28 +127,142 @@ end
 -- desc: load roller config settings
 ---------------------------------------------------------------------------------------------------
 function load_config()
-  local playername = GetPlayerEntity().Name
-  local tempSettings = ashita.settings.load(_addon.path .. '/settings/' .. playername .. '.json');
-  if tempSettings ~= nil then
-    RollerMessage('Config file found.');
-    return tempSettings		
-  else
-    RollerMessage('Settings profiles could not be loaded. Creating empty settings.');
-    tempSettings = defaults;
-    return tempSettings
+  local player = GetPlayerEntity()
+  if not player or not player.Name then
+    RollerMessage('Player not loaded yet. Using default settings.');
+    return defaults;
   end
+  
+  local playername = player.Name
+  local configPath = string.format('%sconfig\\addons\\%s\\%s.lua', AshitaCore:GetInstallPath(), addon.name, playername)
+  
+  if ashita.fs.exists(configPath) then
+    local success, tempSettings = pcall(function() return loadfile(configPath)() end)
+    if success and tempSettings ~= nil then
+      RollerMessage('Config file found.');
+      return tempSettings		
+    end
+  end
+  
+  RollerMessage('Settings profiles could not be loaded. Creating empty settings.');
+  return defaults;
 end;
 
 ---------------------------------------------------------------------------------------------------
--- func: save_objectives
--- desc: saves current RoE objectives to a file
+-- func: serialize_table
+-- desc: Simple table serialization function
+---------------------------------------------------------------------------------------------------
+local function serialize_table(tbl, indent)
+  indent = indent or 0
+  local spacing = string.rep("  ", indent)
+  local result = "{\n"
+  
+  for key, value in pairs(tbl) do
+    local keyStr = type(key) == "string" and string.format('["%s"]', key) or string.format("[%s]", tostring(key))
+    
+    if type(value) == "table" then
+      result = result .. spacing .. "  " .. keyStr .. " = " .. serialize_table(value, indent + 1) .. ",\n"
+    elseif type(value) == "string" then
+      result = result .. spacing .. "  " .. keyStr .. " = \"" .. value .. "\",\n"
+    else
+      result = result .. spacing .. "  " .. keyStr .. " = " .. tostring(value) .. ",\n"
+    end
+  end
+  
+  result = result .. spacing .. "}"
+  return result
+end
+
+---------------------------------------------------------------------------------------------------
+-- func: save_config
+-- desc: saves current settings to a file
 ---------------------------------------------------------------------------------------------------
 function save_config()
-  local playername = GetPlayerEntity().Name
-  DebugMessage("Saved settings/" .. playername .. ".json");
-  -- Save the addon settings to a file (from the addonSettings table)
-  ashita.settings.save(_addon.path .. '/settings/' .. playername .. '.json', settings);
+  local player = GetPlayerEntity()
+  if not player or not player.Name then
+    DebugMessage("Player not loaded yet. Cannot save settings.");
+    return;
+  end
+  
+  local playername = player.Name
+  local configPath = string.format('%sconfig\\addons\\%s\\%s.lua', AshitaCore:GetInstallPath(), addon.name, playername)
+  
+  -- Ensure the directory exists
+  local configDir = string.format('%sconfig\\addons\\%s\\', AshitaCore:GetInstallPath(), addon.name)
+  ashita.fs.create_dir(configDir)
+  
+  DebugMessage("Saved " .. configPath);
+  
+  -- Save the addon settings to a file
+  local file = io.open(configPath, 'w')
+  if file then
+    file:write('return ' .. serialize_table(settings))
+    file:close()
+  end
 end;
+
+----------------------------------------------------------------------------------------------------
+-- func: rollsFixedOverlay
+-- desc: Shows the roller status overlay window.
+----------------------------------------------------------------------------------------------------
+function rollsFixedOverlay()
+  -- Skip GUI display if imgui is not available
+  if not imgui or not settings.showdisplay then
+    return;
+  end
+
+  -- Display the roller information..
+  if (imgui.Begin('AshitaRoller', true) == false) then
+    imgui.End();
+    return;
+  end
+
+  imgui.Text('Roll1: ' .. rollInfo[settings.Roll1].name);
+  imgui.Text('Roll2: ' .. rollInfo[settings.Roll2].name);
+  imgui.Text('Autoroll: ' .. tostring(autoroll));
+  if (settings.engaged) then
+    imgui.Text("Engaged only mode on")
+  end
+  if(settings.crooked2) then
+    imgui.Text("Crooked on roll 2 : ON")
+  else
+    imgui.Text("Crooked on roll 2 : OFF")
+  end
+  if(settings.randomdeal) then
+    imgui.Text("Random Deal : ON")
+  else
+    imgui.Text("Random Deal : OFF")
+  end
+  if(settings.oldrandomdeal) then
+    imgui.Text("Random Deal Mode : Fold/Snake")
+  else
+    imgui.Text("Random Deal Mode : Crooked")
+  end
+  if(settings.gamble) then
+    imgui.Text("Gamble : ON")
+  else
+    imgui.Text("Gamble : OFF")
+  end
+  if(settings.partyalert) then
+    imgui.Text("Party Alert : ON")
+  else
+    imgui.Text("Party Alert : OFF")
+  end
+  if (stealthy) then
+    imgui.Text("Invis/Sneak - No rolling");
+  end
+
+  -- Add job mode display to GUI
+  if mainjob == 17 then
+    imgui.Text("Mode: Main COR");
+  elseif subjob == 17 then
+    imgui.Text("Mode: Sub COR (Single Roll)");
+  else
+    imgui.Text("Mode: Not COR");
+  end
+
+  imgui.End();
+end
 
 function doNextAction()
   if nextAction == "idle" then
@@ -155,38 +271,45 @@ function doNextAction()
     if haveBuff('snake eye') then
       nextAction = "doubleup"
     else
-      AshitaCore:GetChatManager():QueueCommand('/ja "Snake Eye" <me>', 1)
+      AshitaCore:GetChatManager():QueueCommand(1, '/ja "Snake Eye" <me>')
     end
   elseif nextAction == "doubleup" then
-    AshitaCore:GetChatManager():QueueCommand('/ja "Double-Up" <me>', 1)
+    AshitaCore:GetChatManager():QueueCommand(1, '/ja "Double-Up" <me>')
   elseif nextAction == "crooked" then
     if haveBuff('crooked cards') then
       nextAction = "rolling"
     else
-      AshitaCore:GetChatManager():QueueCommand('/ja "Crooked Cards" <me>', 1)
+      AshitaCore:GetChatManager():QueueCommand(1, '/ja "Crooked Cards" <me>')
     end
   elseif nextAction == "rolling" then
     if settings.partyalert and rollerTimeout < 2 then
       return
     else
-      AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[nextRoll].name..'" <me>', 1)
+      if nextRoll and rollInfo[nextRoll] and rollInfo[nextRoll].name then
+        local rollName = rollInfo[nextRoll].name
+        DebugMessage("Executing roll: " .. rollName)
+        AshitaCore:GetChatManager():QueueCommand(1, '/ja "' .. rollName .. '" <me>')
+      else
+        DebugMessage("Error: Invalid roll data for nextRoll: " .. tostring(nextRoll))
+        nextAction = "idle"
+      end
     end
   elseif nextAction == "randomdeal" then
     if randomDealRecast > 0 then
       nextAction = "idle"
     else
-      AshitaCore:GetChatManager():QueueCommand('/ja "Random Deal" <me>', 1)
+      AshitaCore:GetChatManager():QueueCommand(1, '/ja "Random Deal" <me>')
     end
   elseif nextAction == "fold" then
     if not haveBust then
       nextAction = "idle"
     else
-      AshitaCore:GetChatManager():QueueCommand('/ja "Fold" <me>', 1)
+      AshitaCore:GetChatManager():QueueCommand(1, '/ja "Fold" <me>')
     end
   end
 end
 
-ashita.register_event('load', function()
+ashita.events.register('load', 'load_cb', function()
     settings = load_config()
 
     autoroll = false
@@ -241,84 +364,14 @@ ashita.register_event('load', function()
       [601] = {id=601,en="Crooked Cards",ja="クルケッドカード",enl="Crooked Cards",jal="クルケッドカード"},
       }, {"id", "en", "ja", "enl", "jal"}
 
-    --GUI stuff
-    -- Initialize the custom variables..
-    for k, v in pairs(variables) do
-      -- Create the variable..
-      if (v[2] >= ImGuiVar_CDSTRING) then 
-        variables[k][1] = imgui.CreateVar(variables[k][2], variables[k][3]);
-      else
-        variables[k][1] = imgui.CreateVar(variables[k][2]);
-      end
-
-      -- Set a default value if present..
-      if (#v > 2 and v[2] < ImGuiVar_CDSTRING) then
-        imgui.SetVarValue(variables[k][1], variables[k][3]);
-      end        
-    end
+    --GUI stuff - simplified for Ashita v4 compatibility
+    -- No longer needed with simplified variables
 
   end);
 
-----------------------------------------------------------------------------------------------------
--- func: ShowExampleAppFixedOverlay
--- desc: Shows the example fixed overlay.
-----------------------------------------------------------------------------------------------------
-function rollsFixedOverlay()
-
-  -- Display the pet information..
-  if settings.showdisplay then
-    imgui.SetNextWindowSize(220, 200, ImGuiSetCond_Always);
-    if (imgui.Begin('AshitaRoller') == false) then
-      imgui.End();
-      return;
-    end
-
-    imgui.Text('Roll1: ' .. rollInfo[settings.Roll1].name);
-    imgui.Text('Roll2: ' .. rollInfo[settings.Roll2].name);
-    imgui.Text('Autoroll: ' .. tostring(autoroll));
-    if (settings.engaged) then
-      imgui.Text("Engaged only mode on")
-    end
-    if(settings.crooked2) then
-      imgui.Text("Crooked on roll 2 : ON")
-    else
-      imgui.Text("Crooked on roll 2 : OFF")
-    end
-    if(settings.randomdeal) then
-      imgui.Text("Random Deal : ON")
-    else
-      imgui.Text("Random Deal : OFF")
-    end
-    if(settings.oldrandomdeal) then
-      imgui.Text("Random Deal Mode : Fold/Snake")
-    else
-      imgui.Text("Random Deal Mode : Crooked")
-    end
-    if(settings.gamble) then
-      imgui.Text("Gamble : ON")
-    else
-      imgui.Text("Gamble : OFF")
-    end
-    if(settings.partyalert) then
-      imgui.Text("Party Alert : ON")
-    else
-      imgui.Text("Party Alert : OFF")
-    end
-    if (stealthy) then
-      imgui.Text("Invis/Sneak - No rolling");
-    end
-
-    imgui.End();
-  end
-end
-
-----------------------------------------------------------------------------------------------------
--- func: command
--- desc: Event called when a command was entered.
-----------------------------------------------------------------------------------------------------
-ashita.register_event('command', function(command, ntype)
+ashita.events.register('command', 'command_cb', function(e)
     -- Get the arguments of the command..
-    local args = command:args();
+    local args = e.command:args();
 
     if (args[1] ~= '/roller') and args[1] ~= '/roll' then
       return false;
@@ -337,10 +390,26 @@ ashita.register_event('command', function(command, ntype)
       else
         RollerMessage('Automatic Rolling is OFF.')
       end
+      
+      -- Add job detection and mode display
+      updateRecast() -- Ensure we have current job info
+      if mainjob == 17 then
+        RollerMessage('Mode: Main Job COR (Full Features)')
+      elseif subjob == 17 then
+        RollerMessage('Mode: Sub Job COR (Limited Features - Single Roll Only)')
+      else
+        RollerMessage('Mode: Not COR (No Rolling Available)')
+      end
+      RollerMessage('Main Job: ' .. (mainjob or 'Unknown') .. ' | Sub Job: ' .. (subjob or 'Unknown'))
+      
       roll1 = 304
       roll2 = 106
       RollerMessage('Roll 1: '..rollInfo[settings.Roll1].name)
-      RollerMessage('Roll 2: '..rollInfo[settings.Roll2].name)
+      if subjob == 17 then
+        RollerMessage('Roll 2: DISABLED (Sub COR only allows one roll)')
+      else
+        RollerMessage('Roll 2: '..rollInfo[settings.Roll2].name)
+      end
       return true
     else
       if cmd[1] == "help" then
@@ -367,6 +436,18 @@ ashita.register_event('command', function(command, ntype)
           DebugMode = false
         end
       elseif cmd[1] == "flags" then
+        updateRecast() -- Ensure we have current job info
+        DebugMessage("=== JOB INFO ===")
+        DebugMessage("mainjob " .. tostring(mainjob or "nil"))
+        DebugMessage("subjob " .. tostring(subjob or "nil"))
+        if mainjob == 17 then
+          DebugMessage("mode MAIN_COR")
+        elseif subjob == 17 then
+          DebugMessage("mode SUB_COR")
+        else
+          DebugMessage("mode NOT_COR")
+        end
+        DebugMessage("=== ROLL STATUS ===")
         DebugMessage("zoningbool " .. tostring(zoning_bool))
         DebugMessage("lastroll " .. tostring(lastRoll))
         DebugMessage("rollcrooked " .. tostring(rollCrooked))
@@ -435,9 +516,9 @@ ashita.register_event('command', function(command, ntype)
         end
       elseif cmd[1] == "roll" then
         if cmd[2] == "roll1" then
-          AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll1].name..'" <me>', 1)
+          AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll1].name..'" <me>')
         elseif cmd[2] == "roll2" then
-          AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll2].name..'" <me>', 1)
+          AshitaCore:GetChatManager():QueueCommand('/ja "'..rollInfo[settings.Roll2].name..'" <me>')
         else
           zonedelay = 6
           if autoroll == false then
@@ -461,7 +542,7 @@ ashita.register_event('command', function(command, ntype)
         RollerMessage('Setting Roll 2 to: '..rollInfo[settings.Roll2].name)
         save_config()
 
-      elseif cmd[1]:startswith('exp') or cmd[1]:startswith('cap') or cmd[1] == "cp" then
+      elseif startswith(cmd[1], 'exp') or startswith(cmd[1], 'cap') or cmd[1] == "cp" then
         settings.Roll1 = 114
         settings.Roll2 = 116 -- dancer
         rollInfo[settings.Roll1].buffid = rollInfo[settings.Roll1].buffid
@@ -479,7 +560,7 @@ ashita.register_event('command', function(command, ntype)
         RollerMessage('Setting Roll 2 to: '..rollInfo[settings.Roll2].name)
         save_config()
 
-      elseif cmd[1] == "speed" or cmd[1] == "movespeed" or cmd[1]:startswith('bolt') then
+      elseif cmd[1] == "speed" or cmd[1] == "movespeed" or startswith(cmd[1], 'bolt') then
         settings.Roll1 = 118
         settings.Roll2 = 118
         rollInfo[settings.Roll1].buffid = rollInfo[settings.Roll1].buffid
@@ -490,7 +571,7 @@ ashita.register_event('command', function(command, ntype)
         RollerMessage('Setting Roll 2 to: '..rollInfo[settings.Roll2].name)
         save_config()
 
-      elseif cmd[1]:startswith('acc') or cmd[1] == "highacc" then
+      elseif startswith(cmd[1], 'acc') or cmd[1] == "highacc" then
         settings.Roll1 = 109 -- sam
         settings.Roll2 = 108 -- hunter
         RollerMessage('Setting Roll 1 to: '..rollInfo[settings.Roll1].name)
@@ -504,28 +585,28 @@ ashita.register_event('command', function(command, ntype)
         RollerMessage('Setting Roll 2 to: '..rollInfo[settings.Roll2].name)
         save_config()
 
-      elseif cmd[1] == "nuke" or cmd[1] == "burst" or cmd[1] == "matk" or cmd[1]:startswith('mag')  then
+      elseif cmd[1] == "nuke" or cmd[1] == "burst" or cmd[1] == "matk" or startswith(cmd[1], 'mag')  then
         settings.Roll1 = 101 --wizard
         settings.Roll2 = 102 -- warlock
         RollerMessage('Setting Roll 1 to: '..rollInfo[settings.Roll1].name)
         RollerMessage('Setting Roll 2 to: '..rollInfo[settings.Roll2].name)
         save_config()
 
-      elseif cmd[1] == "pet" or cmd[1]:startswith("petphy") then
+      elseif cmd[1] == "pet" or startswith(cmd[1], "petphy") then
         settings.Roll1 = 304
         settings.Roll2 = 106
         RollerMessage('Setting Roll 1 to: '..rollInfo[settings.Roll1].name)
         RollerMessage('Setting Roll 2 to: '..rollInfo[settings.Roll2].name)
         save_config()
 
-      elseif cmd[1] == "petacc" or cmd[1]:startswith("petphy") then
+      elseif cmd[1] == "petacc" or startswith(cmd[1], "petphy") then
         settings.Roll1 = 304
         settings.Roll2 = 111 -- drachen
         RollerMessage('Setting Roll 1 to: '..rollInfo[settings.Roll1].name)
         RollerMessage('Setting Roll 2 to: '..rollInfo[settings.Roll2].name)
         save_config()
 
-      elseif cmd[1] == "petnuke" or cmd[1]:startswith('petma') then
+      elseif cmd[1] == "petnuke" or startswith(cmd[1], 'petma') then
         settings.Roll1 = 115 --pup
         settings.Roll2 = 304 --companion
         RollerMessage('Setting Roll 1 to: '..rollInfo[settings.Roll1].name)
@@ -670,19 +751,19 @@ ashita.register_event('command', function(command, ntype)
   end);
 
 
-ashita.register_event('incoming_packet', function(id, size, packet, packet_modified, blocked)
+ashita.events.register('packet_in', 'packet_in_cb', function(e)
 
-    if (id == 0xB) then
+    if (e.id == 0xB) then
       DebugMessage("Currently zoning.")
       zoning_bool = true
-    elseif (id == 0xA and zoning_bool) then
+    elseif (e.id == 0xA and zoning_bool) then
       DebugMessage("No longer zoning.")
       zoning_bool = false
     end
 
 
-    if id == 0x028 then
-      act = parse_rolls(packet)
+    if e.id == 0x028 then
+      act = parse_rolls(e.data_raw)
 
       if act.category == 6 and table.containskey(rollInfo, act.param) then
         rollActor = act.actor_id
@@ -751,8 +832,8 @@ ashita.register_event('incoming_packet', function(id, size, packet, packet_modif
               end
             end
           elseif subjob==17 then
-            if rollNum < 6 then
-              DebugMessage("Rolling because roll is smaller than 6")
+            if rollNum < 5 then
+              DebugMessage("Rolling because roll is smaller than 5 (subjob mode)")
               nextAction = "doubleup"
             else
               DebugMessage("Finished this roll")
@@ -782,7 +863,7 @@ function haveBuff(buffname)
   if (player == nil) then
     return;
   end
-  local buffs						= AshitaCore:GetDataManager():GetPlayer():GetBuffs();
+  local buffs = AshitaCore:GetMemoryManager():GetPlayer():GetBuffs();
   for i,v in pairs(buffs) do
     if buffs[i] == buffid then
       return true
@@ -864,7 +945,7 @@ function doRoll()
       DebugMessage("We don't have roll 1 buff, trying roll1")
       roll1RollTime = os.time();
       if settings.partyalert then
-        AshitaCore:GetChatManager():QueueCommand('/p Rolling '..rollInfo[settings.Roll1].name..' in 8 secs, stay close <call12>', 1);
+        AshitaCore:GetChatManager():QueueCommand(1, '/p Rolling '..rollInfo[settings.Roll1].name..' in 8 secs, stay close <call12>')
       end
       rollCrooked = false
       rollerTimeout = 0
@@ -879,15 +960,15 @@ function doRoll()
         nextRoll = settings.Roll1
         nextAction = "rolling"
       end
-    elseif mainjob == 17 and not haveRoll2 and not haveBust and phantomRecast == 0 then
+    elseif false then  -- Disabled for subjob compatibility
       DebugMessage("We don't have roll 2 buff, trying roll2")
       roll2RollTime = os.time();
       if settings.partyalert then
-        AshitaCore:GetChatManager():QueueCommand('/p Rolling '..rollInfo[settings.Roll2].name..' in 8 secs, stay close <call12>', 1);
+        AshitaCore:GetChatManager():QueueCommand(1, '/p Rolling '..rollInfo[settings.Roll2].name..' in 8 secs, stay close <call12>')
       end
       rollCrooked = false
       rollerTimeout = 0
-      if mainjob == 17 and mainjob_level > 94 and crookedcardsRecast == 0 and settings.crooked2 then 
+      if mainjob == 17 and subjob ~= 17 and not haveRoll2 and not haveBust and phantomRecast == 0 then 
         DebugMessage("Using Crooked Cards")
         RollerMessage(rollInfo[settings.Roll2].name .. " Lucky: " .. rollInfo[settings.Roll2].stats[14] .. " Unlucky: " .. rollInfo[settings.Roll2].stats[15])
         rollCrooked = true
@@ -909,7 +990,7 @@ function updateRolls()
 
   --DATA GATHERING
   --Rolls&Bust
-  local buffs						= AshitaCore:GetDataManager():GetPlayer():GetBuffs();
+  local buffs = AshitaCore:GetMemoryManager():GetPlayer():GetBuffs();
   for i,v in pairs(buffs) do
     if buffs[i] == rollInfo[settings.Roll1].buffid then
       haveRoll1 = true
@@ -924,22 +1005,37 @@ function updateRolls()
 end
 
 function updateRecast()
+  --Get the new recast manager
+  local mmRecast = AshitaCore:GetMemoryManager():GetRecast();
+  
+  --Helper function to get ability recast by id
+  local function getAbilityRecast(abilityId)
+    for x = 0, 31 do
+      local id = mmRecast:GetAbilityTimerId(x);
+      local timer = mmRecast:GetAbilityTimer(x);
+      if id == abilityId and timer > 0 then
+        return math.floor(timer / 60);
+      end
+    end
+    return 0;
+  end
+  
   --Recasts&Infos
-  snakeRecast = ashita.ffxi.recast.get_ability_recast_by_id(197);--JAid 177 , RecastId 197
-  foldRecast = ashita.ffxi.recast.get_ability_recast_by_id(198);-- JAid 178, RecastId 198
-  phantomRecast = ashita.ffxi.recast.get_ability_recast_by_id(193);-- JAid 97, RecastId 193
-  randomDealRecast = ashita.ffxi.recast.get_ability_recast_by_id(196);-- JAid 133, RecastId 196
-  doubleupRecast = ashita.ffxi.recast.get_ability_recast_by_id(194);-- JAid 123, RecastId 194
-  crookedcardsRecast = ashita.ffxi.recast.get_ability_recast_by_id(96);-- JAid 392, RecastId 96
+  snakeRecast = getAbilityRecast(197);--JAid 177 , RecastId 197
+  foldRecast = getAbilityRecast(198);-- JAid 178, RecastId 198
+  phantomRecast = getAbilityRecast(193);-- JAid 97, RecastId 193
+  randomDealRecast = getAbilityRecast(196);-- JAid 133, RecastId 196
+  doubleupRecast = getAbilityRecast(194);-- JAid 123, RecastId 194
+  crookedcardsRecast = getAbilityRecast(96);-- JAid 392, RecastId 96
 
   player = GetPlayerEntity()
-  playerid = AshitaCore:GetDataManager():GetParty():GetMemberServerId(0)
-  mainjob = AshitaCore:GetDataManager():GetPlayer():GetMainJob()
-  mainjob_level = AshitaCore:GetDataManager():GetPlayer():GetMainJobLevel()
-  subjob = AshitaCore:GetDataManager():GetPlayer():GetSubJob()  
+  playerid = AshitaCore:GetMemoryManager():GetParty():GetMemberServerId(0)
+  mainjob = AshitaCore:GetMemoryManager():GetPlayer():GetMainJob()
+  mainjob_level = AshitaCore:GetMemoryManager():GetPlayer():GetMainJobLevel()
+  subjob = AshitaCore:GetMemoryManager():GetPlayer():GetSubJob()  
 end
 
-ashita.register_event('render', function()
+ashita.events.register('d3d_present', 'present_cb', function()
     updateRecast()
     if (player == nil) then
       zonedelay = 0
@@ -960,7 +1056,7 @@ ashita.register_event('render', function()
 function parse_rolls(packet_data)--returns roll_name, roll_value(when a roll is rolled or double-upped)
   local r_name;
   local r_value;
-  local my_player_id 		= AshitaCore:GetDataManager():GetParty():GetMemberServerId(0);
+  local my_player_id 		= AshitaCore:GetMemoryManager():GetParty():GetMemberServerId(0);
   local act           = { };
   act.actor_id        = ashita.bits.unpack_be( packet_data, 40, 32 );
   act.target_count    = ashita.bits.unpack_be( packet_data, 72, 8 );
@@ -1072,4 +1168,4 @@ function parse_rolls(packet_data)--returns roll_name, roll_value(when a roll is 
   end
 
   return act
-end				
+end 
